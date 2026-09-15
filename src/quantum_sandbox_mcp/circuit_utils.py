@@ -38,7 +38,7 @@ def has_measurements(circuit: QuantumCircuit) -> bool:
 def infer_required_qubits(gates: Sequence[Mapping[str, Any]]) -> int:
     highest = -1
     for gate in gates:
-        for key in ("targets", "controls"):
+        for key in ("targets", "qubits", "controls"):
             for index in gate.get(key, []):
                 highest = max(highest, int(index))
     return highest + 1 if highest >= 0 else 0
@@ -60,7 +60,10 @@ def _require_gate_name(spec: Mapping[str, Any]) -> str:
 
 
 def _targets(spec: Mapping[str, Any]) -> list[int]:
-    return [int(value) for value in spec.get("targets", [])]
+    raw_targets = spec.get("targets", [])
+    if raw_targets:
+        return [int(value) for value in raw_targets]
+    return [int(value) for value in spec.get("qubits", [])]
 
 
 def _controls(spec: Mapping[str, Any]) -> list[int]:
@@ -87,12 +90,16 @@ def _pair_controls_targets(spec: Mapping[str, Any]) -> list[tuple[int, int]]:
             return list(zip(controls, targets, strict=True))
         if len(controls) == 1:
             return [(controls[0], target) for target in targets]
-        raise ValueError("Controls and targets lengths must match, or one control for many targets.")
+        raise ValueError(
+            "Controls and qubits lengths must match, or provide one control for many qubits."
+        )
 
     if len(targets) == 2:
         return [(targets[0], targets[1])]
 
-    raise ValueError("Controlled gate requires controls, or targets=[control,target].")
+    raise ValueError(
+        "Controlled gate requires controls, or qubits=[control,target] (alias: targets=[...])."
+    )
 
 
 def apply_gates(circuit: QuantumCircuit, gates: Sequence[Mapping[str, Any]]) -> None:
@@ -108,7 +115,7 @@ def apply_gates(circuit: QuantumCircuit, gates: Sequence[Mapping[str, Any]]) -> 
 
         if gate in {"x", "y", "z", "h", "s", "sdg", "t", "tdg", "sx", "id", "reset"}:
             if not targets:
-                raise ValueError(f"Gate '{gate}' requires 'targets'.")
+                raise ValueError(f"Gate '{gate}' requires 'qubits' (alias: 'targets').")
             for target in targets:
                 getattr(circuit, gate)(target)
             continue
@@ -117,7 +124,7 @@ def apply_gates(circuit: QuantumCircuit, gates: Sequence[Mapping[str, Any]]) -> 
             if len(params) != 1:
                 raise ValueError(f"Gate '{gate}' expects exactly 1 parameter.")
             if not targets:
-                raise ValueError(f"Gate '{gate}' requires 'targets'.")
+                raise ValueError(f"Gate '{gate}' requires 'qubits' (alias: 'targets').")
             for target in targets:
                 getattr(circuit, gate)(params[0], target)
             continue
@@ -126,7 +133,7 @@ def apply_gates(circuit: QuantumCircuit, gates: Sequence[Mapping[str, Any]]) -> 
             if len(params) != 3:
                 raise ValueError("Gate 'u' expects exactly 3 parameters.")
             if not targets:
-                raise ValueError("Gate 'u' requires 'targets'.")
+                raise ValueError("Gate 'u' requires 'qubits' (alias: 'targets').")
             for target in targets:
                 circuit.u(params[0], params[1], params[2], target)
             continue
@@ -165,7 +172,10 @@ def apply_gates(circuit: QuantumCircuit, gates: Sequence[Mapping[str, Any]]) -> 
             if len(controls) == 1 and len(targets) == 1:
                 circuit.swap(controls[0], targets[0])
                 continue
-            raise ValueError("Swap requires two indexes via targets=[a,b] or controls=[a],targets=[b].")
+            raise ValueError(
+                "Swap requires two indexes via qubits=[a,b] (alias: targets=[a,b]) or "
+                "controls=[a],qubits=[b]."
+            )
 
         if gate in {"cp", "crx", "cry", "crz"}:
             if len(params) != 1:
@@ -181,7 +191,10 @@ def apply_gates(circuit: QuantumCircuit, gates: Sequence[Mapping[str, Any]]) -> 
             if len(targets) == 3:
                 circuit.ccx(targets[0], targets[1], targets[2])
                 continue
-            raise ValueError("CCX requires controls=[c1,c2], targets=[t] or targets=[c1,c2,t].")
+            raise ValueError(
+                "CCX requires controls=[c1,c2], qubits=[t] or qubits=[c1,c2,t] "
+                "(alias: targets=[...])."
+            )
 
         if gate == "measure":
             if not targets:
@@ -195,7 +208,7 @@ def apply_gates(circuit: QuantumCircuit, gates: Sequence[Mapping[str, Any]]) -> 
             if not clbits:
                 clbits = targets
             if len(clbits) != len(targets):
-                raise ValueError("Measurement requires equal numbers of targets and clbits.")
+                raise ValueError("Measurement requires equal numbers of qubits (or targets) and clbits.")
             circuit.measure(targets, clbits)
             continue
 

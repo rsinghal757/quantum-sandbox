@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
+from mcp.server.mcpserver.exceptions import ToolError
 
+from quantum_sandbox_mcp.api import app
 from quantum_sandbox_mcp.engine import QuantumSandboxEngine
 from quantum_sandbox_mcp.exceptions import MissingMeasurementError
+from quantum_sandbox_mcp.mcp_server import create_circuit as create_circuit_tool
 from quantum_sandbox_mcp.store import SQLiteStore
 
 
@@ -88,3 +92,37 @@ def test_missing_measurement_raises(engine: QuantumSandboxEngine) -> None:
 
     with pytest.raises(MissingMeasurementError):
         engine.run_circuit(circuit_id=created["circuit_id"])
+
+
+def test_qubits_alias_is_supported(engine: QuantumSandboxEngine) -> None:
+    created = engine.create_circuit(
+        num_qubits=2,
+        gates=[
+            {"gate": "h", "qubits": [0]},
+            {"gate": "cx", "qubits": [0, 1]},
+            {"gate": "measure", "qubits": [0, 1], "clbits": [0, 1]},
+        ],
+    )
+
+    run = engine.run_circuit(circuit_id=created["circuit_id"], shots=1024)
+    assert run["counts"].get("00", 0) > 0
+    assert run["counts"].get("11", 0) > 0
+
+
+def test_tool_error_surfaces_validation_message() -> None:
+    with pytest.raises(ToolError, match="requires 'qubits'"):
+        create_circuit_tool(num_qubits=1, gates=[{"gate": "h"}])
+
+
+def test_oauth_discovery_endpoints_are_no_auth_friendly() -> None:
+    with TestClient(app) as client:
+        for path in (
+            "/.well-known/oauth-protected-resource",
+            "/.well-known/oauth-authorization-server",
+            "/mcp/.well-known/openid-configuration",
+        ):
+            response = client.get(path)
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["authorization_required"] is False
+            assert payload["mcp_authentication"]["type"] == "none"

@@ -52,7 +52,9 @@ Implemented tools:
 
 Inputs support:
 
-- structured gate lists (`[{"gate": ..., "targets": [...]}, ...]`)
+- structured gate lists (`[{"gate": ..., "qubits": [...]}, ...]`)
+  - `targets` is still accepted as an alias for backward compatibility
+  - for measurement gates, use `clbits` to map classical bits
 - OpenQASM 2 and OpenQASM 3
 
 Defaults:
@@ -98,6 +100,8 @@ Now open `http://localhost:8000`.
 5. Save and connect.
 
 CORS is enabled for MCP session/protocol headers to support browser-based MCP clients.
+No OAuth is required; the service also exposes no-auth discovery metadata on common
+`.well-known` OAuth/OpenID probe paths for connector compatibility.
 
 ## Cursor and Claude config examples
 

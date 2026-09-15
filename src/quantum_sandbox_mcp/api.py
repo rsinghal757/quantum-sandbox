@@ -74,10 +74,70 @@ async def api_get_job(request: Request) -> Response:
         return JSONResponse({"detail": str(exc)}, status_code=404)
 
 
+def _discovery_payload(base_url: str) -> dict[str, object]:
+    return {
+        "resource": f"{base_url}/mcp",
+        "issuer": base_url,
+        "authorization_servers": [],
+        "authorization_required": False,
+        "mcp_authentication": {"type": "none"},
+    }
+
+
+async def oauth_protected_resource(request: Request) -> Response:
+    base = str(request.base_url).rstrip("/")
+    return JSONResponse(_discovery_payload(base))
+
+
+async def oauth_authorization_server(request: Request) -> Response:
+    base = str(request.base_url).rstrip("/")
+    payload = _discovery_payload(base)
+    payload.update(
+        {
+            "authorization_endpoint": None,
+            "token_endpoint": None,
+            "grant_types_supported": [],
+            "response_types_supported": [],
+            "token_endpoint_auth_methods_supported": [],
+        }
+    )
+    return JSONResponse(payload)
+
+
+async def openid_configuration(request: Request) -> Response:
+    base = str(request.base_url).rstrip("/")
+    payload = _discovery_payload(base)
+    payload.update(
+        {
+            "authorization_endpoint": None,
+            "token_endpoint": None,
+            "jwks_uri": None,
+            "subject_types_supported": [],
+            "id_token_signing_alg_values_supported": [],
+        }
+    )
+    return JSONResponse(payload)
+
+
 web_out_dir = _resolve_web_out_dir()
 mcp_http_app.add_route("/health", health, methods=["GET"])
 mcp_http_app.add_route("/api/jobs", api_list_jobs, methods=["GET"])
 mcp_http_app.add_route("/api/jobs/{job_id:str}", api_get_job, methods=["GET"])
+mcp_http_app.add_route(
+    "/.well-known/oauth-protected-resource",
+    oauth_protected_resource,
+    methods=["GET"],
+)
+mcp_http_app.add_route(
+    "/.well-known/oauth-authorization-server",
+    oauth_authorization_server,
+    methods=["GET"],
+)
+mcp_http_app.add_route(
+    "/mcp/.well-known/openid-configuration",
+    openid_configuration,
+    methods=["GET"],
+)
 if web_out_dir:
     mcp_http_app.mount(
         "/",
