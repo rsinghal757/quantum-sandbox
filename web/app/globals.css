@@ -1,0 +1,113 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f172a;
+  --card: #1e293b;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --error: #fb7185;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: linear-gradient(180deg, #020617, #0f172a);
+  color: #e2e8f0;
+  padding: 2rem;
+}
+
+h1,
+h2,
+h3 {
+  margin-top: 0;
+}
+
+main {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+header p {
+  color: var(--muted);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.metric {
+  font-size: 1.75rem;
+  margin-bottom: 0;
+  color: var(--accent);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 1rem;
+}
+
+.jobs-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.jobs-list button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: var(--card);
+  color: inherit;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+  cursor: pointer;
+}
+
+.jobs-list button.selected {
+  border-color: var(--accent);
+}
+
+.details,
+pre {
+  background: var(--card);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error {
+  color: var(--error);
+}
+
+@media (max-width: 900px) {
+  body {
+    padding: 1rem;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

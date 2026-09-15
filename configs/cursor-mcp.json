@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "quantum-sandbox": {
+      "url": "https://<host>/mcp"
+    }
+  }
+}

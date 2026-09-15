@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "quantum-sandbox": {
+      "command": "quantum-sandbox-mcp",
+      "args": []
+    }
+  }
+}
