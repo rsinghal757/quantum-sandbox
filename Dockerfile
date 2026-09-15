@@ -18,6 +18,5 @@ RUN python3 -m pip install --no-cache-dir .
 
 COPY --from=web-builder /app/web/out ./web/out
 
-VOLUME ["/data"]
 EXPOSE 8000
 CMD ["python3", "-m", "quantum_sandbox_mcp.api"]
