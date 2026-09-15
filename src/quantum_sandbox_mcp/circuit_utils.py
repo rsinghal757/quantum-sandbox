@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from math import pi
+import re
 from typing import Any
 
 from qiskit import QuantumCircuit
@@ -9,17 +10,40 @@ import qiskit.qasm2 as qasm2
 import qiskit.qasm3 as qasm3
 
 
+def _qasm_compat_variants(qasm_source: str) -> list[str]:
+    variants = [qasm_source]
+    upper = qasm_source.upper()
+
+    if "OPENQASM 2" in upper:
+        # Some agents emit QASM2 with "u(...)" even though qelib1 defines u3().
+        variants.append(re.sub(r"(?<![A-Za-z0-9_])u\s*\(", "u3(", qasm_source))
+
+    if "OPENQASM 3" in upper:
+        # QASM3 stdgates commonly declares U(...), while some emit lowercase u(...).
+        variants.append(re.sub(r"(?<![A-Za-z0-9_])u\s*\(", "U(", qasm_source))
+
+    if "OPENQASM" not in upper:
+        variants.append(re.sub(r"(?<![A-Za-z0-9_])u\s*\(", "u3(", qasm_source))
+
+    deduped: list[str] = []
+    for item in variants:
+        if item not in deduped:
+            deduped.append(item)
+    return deduped
+
+
 def circuit_from_qasm(qasm_source: str) -> QuantumCircuit:
     errors: list[str] = []
-    try:
-        return qasm2.loads(qasm_source)
-    except Exception as exc:  # pragma: no cover - error path only
-        errors.append(f"OpenQASM 2 parse failed: {exc}")
+    for candidate in _qasm_compat_variants(qasm_source):
+        try:
+            return qasm2.loads(candidate)
+        except Exception as exc:  # pragma: no cover - error path only
+            errors.append(f"OpenQASM 2 parse failed: {exc}")
 
-    try:
-        return qasm3.loads(qasm_source)
-    except Exception as exc:
-        errors.append(f"OpenQASM 3 parse failed: {exc}")
+        try:
+            return qasm3.loads(candidate)
+        except Exception as exc:
+            errors.append(f"OpenQASM 3 parse failed: {exc}")
 
     raise ValueError("Could not parse provided QASM. " + " | ".join(errors))
 

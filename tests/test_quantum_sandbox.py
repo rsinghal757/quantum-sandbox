@@ -75,6 +75,21 @@ h q[0];
     assert probabilities["1"] == pytest.approx(0.5, abs=0.01)
 
 
+def test_openqasm2_u_gate_compatibility(engine: QuantumSandboxEngine) -> None:
+    qasm2 = """
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[1];
+creg c[1];
+u(pi/2,0,pi) q[0];
+measure q[0] -> c[0];
+""".strip()
+
+    run = engine.run_circuit(qasm=qasm2, shots=512)
+    total = sum(run["counts"].values())
+    assert total == 512
+
+
 def test_explain_result(engine: QuantumSandboxEngine) -> None:
     explanation = engine.explain_result(counts={"00": 530, "11": 494}, shots=1024)
 

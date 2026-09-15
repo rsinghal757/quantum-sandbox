@@ -56,11 +56,41 @@ Inputs support:
   - `targets` is still accepted as an alias for backward compatibility
   - for measurement gates, use `clbits` to map classical bits
 - OpenQASM 2 and OpenQASM 3
+  - Includes compatibility normalization for QASM payloads that emit lowercase `u(...)`
+    by mapping to parser-supported equivalents (`u3(...)` for QASM2, `U(...)` for QASM3)
 
 Defaults:
 
 - backend: `aer_simulator`
 - shots: `1024`
+
+## Dashboard (research console)
+
+The `/` dashboard is a static-export Next.js research console served by the Python host.
+
+### Shipped UX capabilities
+
+- Dark-mode-first layout with persisted light/dark toggle
+- Jobs table with search, status/backend filters, date range, and sorting
+- Deep-linkable jobs (`/jobs/<job_id>`) with server-side index fallback
+- Auto-refresh + manual refresh controls
+- Circuit summary cards (qubits, clbits, depth, size, gate counts)
+- Circuit visualization panel (wire/layer diagram with measurement mapping)
+- Histogram charts for counts/probabilities with optional log-scale counts
+- Side-by-side job comparison overlay + count-diff table
+- Probability table, amplitude views (`|amp|^2` and real/imag), Bloch spheres
+- OpenQASM syntax-highlighted viewer + copy
+- Structured gate JSON and equivalent Qiskit sketch panels
+- Metadata and input payload JSON panels
+- Export selected job as JSON and counts as CSV
+
+### Screenshot notes (what you should see)
+
+1. **Jobs Observatory (top)**: metric strip + refresh/theme controls + advanced filters.
+2. **Circuit Analysis (middle)**: summary cards and a Qiskit-style wire diagram.
+3. **Measurement Analysis**: histogram/probability views and comparison diff table.
+4. **State Analysis**: Bloch sphere cards per qubit and amplitude charts when available.
+5. **Reproducibility**: OpenQASM + structured gates + Qiskit sketch + metadata JSON.
 
 ## Quickstart (local)
 

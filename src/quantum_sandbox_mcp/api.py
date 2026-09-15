@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime, time, timezone
 import os
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from .config import get_data_dir
 from .exceptions import JobNotFoundError
+from .job_views import enrich_job, enrich_jobs
 from .mcp_server import engine, mcp
 
 
@@ -29,6 +32,87 @@ def _resolve_web_out_dir() -> Path | None:
         if resolved.exists():
             return resolved
     return None
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _parse_date_start(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _parse_date_end(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return datetime.combine(parsed.date(), time.max, tzinfo=timezone.utc)
+
+
+def _job_matches_search(job: dict[str, Any], query: str) -> bool:
+    if not query:
+        return True
+    lowered = query.lower()
+    fields = [
+        str(job.get("id", "")),
+        str(job.get("kind", "")),
+        str(job.get("status", "")),
+        str(job.get("backend", "")),
+        str(job.get("error", "")),
+        str(job.get("created_at", "")),
+        str(job.get("updated_at", "")),
+        str(job.get("metadata", "")),
+        str(job.get("input_payload", "")),
+    ]
+    return any(lowered in field.lower() for field in fields)
+
+
+def _duration_ms(job: dict[str, Any]) -> int:
+    start = _parse_timestamp(job.get("created_at"))
+    end = _parse_timestamp(job.get("updated_at"))
+    if start is None or end is None:
+        return 0
+    return max(int((end - start).total_seconds() * 1000), 0)
+
+
+def _sort_jobs(jobs: list[dict[str, Any]], sort_by: str, sort_dir: str) -> list[dict[str, Any]]:
+    reverse = sort_dir.lower() == "desc"
+
+    def created_key(job: dict[str, Any]) -> float:
+        return (_parse_timestamp(job.get("created_at")) or datetime.min).timestamp()
+
+    def updated_key(job: dict[str, Any]) -> float:
+        return (_parse_timestamp(job.get("updated_at")) or datetime.min).timestamp()
+
+    if sort_by == "updated_at":
+        key_fn = updated_key
+    elif sort_by == "shots":
+        key_fn = lambda job: int(job.get("shots") or 0)
+    elif sort_by == "duration":
+        key_fn = _duration_ms
+    elif sort_by == "backend":
+        key_fn = lambda job: str(job.get("backend") or "")
+    elif sort_by == "status":
+        key_fn = lambda job: str(job.get("status") or "")
+    elif sort_by == "kind":
+        key_fn = lambda job: str(job.get("kind") or "")
+    else:
+        key_fn = created_key
+
+    return sorted(jobs, key=key_fn, reverse=reverse)
 
 
 mcp_http_app = mcp.streamable_http_app(
@@ -57,21 +141,50 @@ async def health(_: Request) -> Response:
 
 
 async def api_list_jobs(request: Request) -> Response:
-    raw_limit = request.query_params.get("limit", "25")
+    raw_limit = request.query_params.get("limit", "200")
     try:
         limit = int(raw_limit)
     except ValueError:
         return JSONResponse({"detail": "limit must be an integer"}, status_code=400)
+
     status = request.query_params.get("status")
-    return JSONResponse(engine.list_jobs(limit=limit, status=status))
+    backend = request.query_params.get("backend")
+    search = request.query_params.get("search", "").strip()
+    start_date = _parse_date_start(request.query_params.get("start_date"))
+    end_date = _parse_date_end(request.query_params.get("end_date"))
+    sort_by = request.query_params.get("sort_by", "created_at")
+    sort_dir = request.query_params.get("sort_dir", "desc")
+
+    jobs = engine.list_jobs(limit=limit, status=status).get("jobs", [])
+
+    filtered: list[dict[str, Any]] = []
+    for job in jobs:
+        if backend and str(job.get("backend") or "") != backend:
+            continue
+        if not _job_matches_search(job, search):
+            continue
+
+        created = _parse_timestamp(job.get("created_at"))
+        if start_date and created and created < start_date:
+            continue
+        if end_date and created and created > end_date:
+            continue
+
+        filtered.append(job)
+
+    sorted_jobs = _sort_jobs(filtered, sort_by=sort_by, sort_dir=sort_dir)
+    enriched = enrich_jobs(sorted_jobs, include_heavy=False)
+    return JSONResponse({"jobs": enriched, "total": len(enriched)})
 
 
 async def api_get_job(request: Request) -> Response:
     job_id = request.path_params["job_id"]
     try:
-        return JSONResponse(engine.get_job(job_id=job_id))
+        job = engine.get_job(job_id=job_id)
     except JobNotFoundError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=404)
+
+    return JSONResponse(enrich_job(job, include_heavy=True))
 
 
 def _discovery_payload(base_url: str) -> dict[str, object]:
@@ -120,9 +233,28 @@ async def openid_configuration(request: Request) -> Response:
 
 
 web_out_dir = _resolve_web_out_dir()
+web_index_file = web_out_dir / "index.html" if web_out_dir else None
+
+
+async def dashboard_unavailable(_: Request) -> Response:
+    return JSONResponse(
+        {
+            "message": "Web dashboard is not built yet. Run `npm install && npm run build` in ./web.",
+        },
+        status_code=503,
+    )
+
+
+async def serve_job_deep_link(request: Request) -> Response:
+    if web_index_file and web_index_file.exists():
+        return FileResponse(str(web_index_file))
+    return await dashboard_unavailable(request)
+
+
 mcp_http_app.add_route("/health", health, methods=["GET"])
 mcp_http_app.add_route("/api/jobs", api_list_jobs, methods=["GET"])
 mcp_http_app.add_route("/api/jobs/{job_id:str}", api_get_job, methods=["GET"])
+mcp_http_app.add_route("/jobs/{job_id:str}", serve_job_deep_link, methods=["GET"])
 mcp_http_app.add_route(
     "/.well-known/oauth-protected-resource",
     oauth_protected_resource,
@@ -145,15 +277,6 @@ if web_out_dir:
         name="dashboard",
     )
 else:
-
-    async def dashboard_unavailable(_: Request) -> Response:
-        return JSONResponse(
-            {
-                "message": "Web dashboard is not built yet. Run `npm install && npm run build` in ./web.",
-            },
-            status_code=503,
-        )
-
     mcp_http_app.add_route("/", dashboard_unavailable, methods=["GET"])
 
 
