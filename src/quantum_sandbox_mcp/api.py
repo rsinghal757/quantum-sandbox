@@ -13,6 +13,24 @@ from .config import get_data_dir
 from .exceptions import JobNotFoundError
 from .mcp_server import engine, mcp
 
+
+def _resolve_web_out_dir() -> Path | None:
+    configured = os.getenv("QUANTUM_SANDBOX_WEB_OUT")
+    candidates = []
+    if configured:
+        candidates.append(Path(configured).expanduser())
+    module_path = Path(__file__).resolve()
+    candidates.append(Path("/app/web/out"))
+    candidates.extend(parent / "web" / "out" for parent in module_path.parents)
+    candidates.append(Path.cwd() / "web" / "out")
+
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.exists():
+            return resolved
+    return None
+
+
 mcp_http_app = mcp.streamable_http_app(
     streamable_http_path="/mcp",
     host=os.getenv("MCP_ALLOWED_HOST", "0.0.0.0"),
@@ -56,11 +74,11 @@ async def api_get_job(request: Request) -> Response:
         return JSONResponse({"detail": str(exc)}, status_code=404)
 
 
-web_out_dir = Path(__file__).resolve().parents[2] / "web" / "out"
+web_out_dir = _resolve_web_out_dir()
 mcp_http_app.add_route("/health", health, methods=["GET"])
 mcp_http_app.add_route("/api/jobs", api_list_jobs, methods=["GET"])
 mcp_http_app.add_route("/api/jobs/{job_id:str}", api_get_job, methods=["GET"])
-if web_out_dir.exists():
+if web_out_dir:
     mcp_http_app.mount(
         "/",
         StaticFiles(directory=str(web_out_dir), html=True),
