@@ -342,3 +342,16 @@ def enrich_job(job: dict[str, Any], *, include_heavy: bool) -> dict[str, Any]:
 
 def enrich_jobs(jobs: list[dict[str, Any]], *, include_heavy: bool) -> list[dict[str, Any]]:
     return [enrich_job(job, include_heavy=include_heavy) for job in jobs]
+
+
+def build_circuit_view(qasm: str) -> dict[str, Any]:
+    circuit = circuit_from_qasm(qasm)
+    operations = _operation_payload(circuit)
+    summary = circuit_summary(circuit)
+    return {
+        **summary,
+        "layers": _layer_operations(operations),
+        "operations": operations,
+        "structured_gates": _structured_gates(operations),
+        "qiskit_python": _qiskit_snippet(operations, circuit.num_qubits, circuit.num_clbits),
+    }

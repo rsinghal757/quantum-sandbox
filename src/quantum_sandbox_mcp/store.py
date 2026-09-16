@@ -116,6 +116,20 @@ class SQLiteStore:
             raise CircuitNotFoundError(f"Circuit '{circuit_id}' was not found.")
         return dict(row)
 
+    def list_circuits(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        bounded_limit = max(1, min(limit, 500))
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                  FROM circuits
+              ORDER BY updated_at DESC
+                 LIMIT ?
+                """,
+                (bounded_limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def create_job(
         self,
         *,

@@ -130,6 +130,22 @@ class QuantumSandboxEngine:
             **summary,
         }
 
+    def get_circuit(self, *, circuit_id: str) -> dict[str, Any]:
+        persisted = self.store.get_circuit(circuit_id)
+        circuit = circuit_from_qasm(persisted["qasm"])
+        return {
+            "circuit_id": persisted["id"],
+            "name": persisted.get("name"),
+            "qasm": persisted["qasm"],
+            "created_at": persisted["created_at"],
+            "updated_at": persisted["updated_at"],
+            **circuit_summary(circuit),
+        }
+
+    def list_circuits(self, *, limit: int = 100) -> dict[str, Any]:
+        circuits = self.store.list_circuits(limit=limit)
+        return {"circuits": circuits}
+
     def add_gates(
         self,
         *,

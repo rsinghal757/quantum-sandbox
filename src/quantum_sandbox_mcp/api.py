@@ -13,7 +13,7 @@ from starlette.staticfiles import StaticFiles
 
 from .config import get_data_dir
 from .exceptions import JobNotFoundError
-from .job_views import enrich_job, enrich_jobs
+from .job_views import build_circuit_view, enrich_job, enrich_jobs
 from .mcp_server import engine, mcp
 
 
@@ -187,6 +187,164 @@ async def api_get_job(request: Request) -> Response:
     return JSONResponse(enrich_job(job, include_heavy=True))
 
 
+async def api_list_circuits(request: Request) -> Response:
+    raw_limit = request.query_params.get("limit", "100")
+    try:
+        limit = int(raw_limit)
+    except ValueError:
+        return JSONResponse({"detail": "limit must be an integer"}, status_code=400)
+    return JSONResponse(engine.list_circuits(limit=limit))
+
+
+async def _request_json(request: Request) -> tuple[dict[str, Any] | None, Response | None]:
+    try:
+        payload = await request.json()
+    except Exception:
+        return None, JSONResponse({"detail": "request body must be valid JSON"}, status_code=400)
+    if not isinstance(payload, dict):
+        return None, JSONResponse({"detail": "request body must be a JSON object"}, status_code=400)
+    return payload, None
+
+
+def _as_gate_list(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+    gates = payload.get("gates")
+    if gates is None:
+        return None
+    if not isinstance(gates, list) or not all(isinstance(item, dict) for item in gates):
+        raise ValueError("'gates' must be a list of JSON objects.")
+    return gates
+
+
+async def api_create_circuit(request: Request) -> Response:
+    payload, error = await _request_json(request)
+    if error:
+        return error
+    assert payload is not None
+
+    try:
+        created = engine.create_circuit(
+            num_qubits=int(payload["num_qubits"]) if payload.get("num_qubits") is not None else None,
+            num_clbits=int(payload["num_clbits"]) if payload.get("num_clbits") is not None else None,
+            name=str(payload["name"]) if payload.get("name") is not None else None,
+            gates=_as_gate_list(payload),
+            qasm=str(payload["qasm"]) if payload.get("qasm") is not None else None,
+        )
+    except (ValueError, TypeError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=500)
+    return JSONResponse(created, status_code=201)
+
+
+def _resolve_run_circuit(payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    circuit_id = str(payload["circuit_id"]) if payload.get("circuit_id") else None
+    qasm = str(payload["qasm"]) if payload.get("qasm") else None
+    if circuit_id:
+        return circuit_id, None
+    return None, qasm
+
+
+async def api_run(request: Request) -> Response:
+    payload, error = await _request_json(request)
+    if error:
+        return error
+    assert payload is not None
+
+    try:
+        gates = _as_gate_list(payload)
+        circuit_id, qasm = _resolve_run_circuit(payload)
+        if not circuit_id:
+            created = engine.create_circuit(
+                num_qubits=int(payload["num_qubits"]) if payload.get("num_qubits") is not None else None,
+                num_clbits=int(payload["num_clbits"]) if payload.get("num_clbits") is not None else None,
+                name=str(payload["name"]) if payload.get("name") is not None else None,
+                gates=gates,
+                qasm=qasm,
+            )
+            circuit_id = created["circuit_id"]
+
+        run_result = engine.run_circuit(
+            circuit_id=circuit_id,
+            backend=str(payload.get("backend") or "aer_simulator"),
+            shots=int(payload.get("shots") or 1024),
+            metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else None,
+        )
+        job = engine.get_job(job_id=run_result["job_id"])
+    except (ValueError, TypeError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=500)
+
+    return JSONResponse(
+        {
+            "circuit_id": circuit_id,
+            "job": enrich_job(job, include_heavy=True),
+        },
+        status_code=201,
+    )
+
+
+async def api_statevector(request: Request) -> Response:
+    payload, error = await _request_json(request)
+    if error:
+        return error
+    assert payload is not None
+
+    try:
+        gates = _as_gate_list(payload)
+        circuit_id, qasm = _resolve_run_circuit(payload)
+        if not circuit_id:
+            created = engine.create_circuit(
+                num_qubits=int(payload["num_qubits"]) if payload.get("num_qubits") is not None else None,
+                num_clbits=int(payload["num_clbits"]) if payload.get("num_clbits") is not None else None,
+                name=str(payload["name"]) if payload.get("name") is not None else None,
+                gates=gates,
+                qasm=qasm,
+            )
+            circuit_id = created["circuit_id"]
+
+        sim_result = engine.simulate_statevector(
+            circuit_id=circuit_id,
+            metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else None,
+        )
+        job = engine.get_job(job_id=sim_result["job_id"])
+    except (ValueError, TypeError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=500)
+
+    return JSONResponse(
+        {
+            "circuit_id": circuit_id,
+            "job": enrich_job(job, include_heavy=True),
+        },
+        status_code=201,
+    )
+
+
+async def api_circuit_model(request: Request) -> Response:
+    payload, error = await _request_json(request)
+    if error:
+        return error
+    assert payload is not None
+
+    try:
+        if payload.get("circuit_id"):
+            persisted = engine.get_circuit(circuit_id=str(payload["circuit_id"]))
+            qasm = str(persisted["qasm"])
+        elif payload.get("qasm"):
+            qasm = str(payload["qasm"])
+        else:
+            return JSONResponse({"detail": "Provide circuit_id or qasm."}, status_code=400)
+
+        model = build_circuit_view(qasm)
+    except (ValueError, TypeError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except Exception as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=500)
+    return JSONResponse({"qasm": qasm, "circuit": model})
+
+
 def _discovery_payload(base_url: str) -> dict[str, object]:
     return {
         "resource": f"{base_url}/mcp",
@@ -254,6 +412,11 @@ async def serve_job_deep_link(request: Request) -> Response:
 mcp_http_app.add_route("/health", health, methods=["GET"])
 mcp_http_app.add_route("/api/jobs", api_list_jobs, methods=["GET"])
 mcp_http_app.add_route("/api/jobs/{job_id:str}", api_get_job, methods=["GET"])
+mcp_http_app.add_route("/api/circuits", api_list_circuits, methods=["GET"])
+mcp_http_app.add_route("/api/circuits", api_create_circuit, methods=["POST"])
+mcp_http_app.add_route("/api/run", api_run, methods=["POST"])
+mcp_http_app.add_route("/api/statevector", api_statevector, methods=["POST"])
+mcp_http_app.add_route("/api/circuit-model", api_circuit_model, methods=["POST"])
 mcp_http_app.add_route("/jobs/{job_id:str}", serve_job_deep_link, methods=["GET"])
 mcp_http_app.add_route(
     "/.well-known/oauth-protected-resource",

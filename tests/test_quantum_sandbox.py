@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from mcp.server.mcpserver.exceptions import ToolError
 
-from quantum_sandbox_mcp.api import app
+from quantum_sandbox_mcp.api import app, engine as api_engine
 from quantum_sandbox_mcp.engine import QuantumSandboxEngine
 from quantum_sandbox_mcp.exceptions import MissingMeasurementError
 from quantum_sandbox_mcp.mcp_server import create_circuit as create_circuit_tool
@@ -130,14 +130,57 @@ def test_tool_error_surfaces_validation_message() -> None:
 
 
 def test_oauth_discovery_endpoints_are_no_auth_friendly() -> None:
-    with TestClient(app) as client:
-        for path in (
-            "/.well-known/oauth-protected-resource",
-            "/.well-known/oauth-authorization-server",
-            "/mcp/.well-known/openid-configuration",
-        ):
-            response = client.get(path)
-            assert response.status_code == 200
-            payload = response.json()
-            assert payload["authorization_required"] is False
-            assert payload["mcp_authentication"]["type"] == "none"
+    client = TestClient(app)
+    for path in (
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-authorization-server",
+        "/mcp/.well-known/openid-configuration",
+    ):
+        response = client.get(path)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["authorization_required"] is False
+        assert payload["mcp_authentication"]["type"] == "none"
+
+
+def test_studio_api_endpoints_support_edit_run_loop(tmp_path) -> None:
+    original_store = api_engine.store
+    api_engine.store = SQLiteStore(tmp_path / "studio-api.sqlite3")
+    try:
+        client = TestClient(app)
+        create = client.post(
+            "/api/circuits",
+            json={
+                "name": "studio-loop",
+                "num_qubits": 2,
+                "num_clbits": 2,
+                "gates": [
+                    {"gate": "h", "qubits": [0]},
+                    {"gate": "cx", "qubits": [0, 1]},
+                    {"gate": "measure", "qubits": [0, 1], "clbits": [0, 1]},
+                ],
+            },
+        )
+        assert create.status_code == 201
+        circuit_id = create.json()["circuit_id"]
+
+        run = client.post("/api/run", json={"circuit_id": circuit_id, "shots": 128})
+        assert run.status_code == 201
+        job = run.json()["job"]
+        assert job["id"]
+        assert job["status"] == "completed"
+
+        statevector = client.post("/api/statevector", json={"circuit_id": circuit_id})
+        assert statevector.status_code == 201
+
+        listed = client.get("/api/circuits?limit=5")
+        assert listed.status_code == 200
+        assert listed.json()["circuits"][0]["id"] == circuit_id
+
+        model = client.post("/api/circuit-model", json={"circuit_id": circuit_id})
+        assert model.status_code == 200
+        payload = model.json()
+        assert payload["circuit"]["num_qubits"] == 2
+        assert len(payload["circuit"]["structured_gates"]) >= 3
+    finally:
+        api_engine.store = original_store

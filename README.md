@@ -16,7 +16,13 @@ Single-host routing:
 - `GET /` -> Next.js dashboard (static export from `web/out`)
 - `POST /mcp` -> Streamable HTTP MCP
 - `GET /health` -> app health and data directory
-- `GET /api/jobs` -> dashboard API for persisted jobs
+- `GET /api/jobs` -> jobs history API
+- `GET /api/jobs/{job_id}` -> rich job detail (derived visual fields)
+- `GET /api/circuits` -> persisted circuits history
+- `POST /api/circuits` -> persist a circuit from gates or QASM
+- `POST /api/run` -> run shot-based simulation from circuit or draft payload
+- `POST /api/statevector` -> run statevector simulation from circuit or draft payload
+- `POST /api/circuit-model` -> parse circuit into editor-friendly layered model
 
 MCP is also available over stdio with:
 
@@ -64,40 +70,27 @@ Defaults:
 - backend: `aer_simulator`
 - shots: `1024`
 
-## Dashboard (research console)
+## Quantum Sandbox Studio (web)
 
-The `/` dashboard is a static-export Next.js research console served by the Python host.
+The `/` web app is now **Quantum Sandbox Studio**: a calm 3-zone editor/inspection product
+served as static export from `web/out` by the Python host.
 
-### Shipped UX capabilities
+### Studio information architecture
 
-- Light-mode-first layout (Qiskit-style) with persisted light/dark toggle
-- Jobs table with search, status/backend filters, date range, and sorting
-- Deep-linkable jobs (`/jobs/<job_id>`) with server-side index fallback
-- Auto-refresh + manual refresh controls
-- Circuit summary cards (qubits, clbits, depth, size, gate counts)
-- Circuit visualization panel (Qiskit Playground–style interactive circuit canvas)
-  - readable default gate spacing for deep circuits
-  - per-gate colored chips, controls/targets, measurement links
-  - horizontal + vertical pan/scroll
-  - zoom in/out, fit-to-width, reset view
-  - overview/detail mode toggle + layer scrubber for depth-heavy circuits
-- Console shell keeps scroll contained in panels (jobs list, circuit, charts, code viewers)
-- Histogram charts for counts/probabilities with optional log-scale counts
-- Side-by-side job comparison overlay + count-diff table
-- Probability table, amplitude views (`|amp|^2` and real/imag), Bloch spheres
-- OpenQASM syntax-highlighted viewer + copy
-- Structured gate JSON and equivalent Qiskit sketch panels
-- Metadata and input payload JSON panels
-- Export selected job as JSON and counts as CSV
+1. **Left rail** (history): compact searchable Jobs/Circuits timeline from shared SQLite.
+2. **Center hero**:
+   - color-coded gate palette
+   - editable quantum circuit canvas (drag/drop gate placement, gate move/delete, param edit)
+   - run toolbar (shots, run, undo/redo, qubit add/remove, zoom controls)
+3. **Right drawer** (collapsible): focused run results (histogram, probability table, Bloch).
+4. **Code drawer** (secondary): OpenQASM, Qiskit sketch, structured gates JSON with copy.
 
-### Screenshot notes (what you should see)
+### Studio interaction loop
 
-1. **Jobs Observatory (top)**: metric strip + refresh/theme controls + advanced filters.
-2. **Circuit Analysis (middle)**: summary cards and a full-height interactive circuit canvas
-   with zoom controls and a layer scrubber.
-3. **Measurement Analysis**: histogram/probability views and comparison diff table.
-4. **State Analysis**: Bloch sphere cards per qubit and amplitude charts when available.
-5. **Reproducibility**: OpenQASM + structured gates + Qiskit sketch + metadata JSON.
+- Edit circuit in-memory on canvas.
+- Click **Run** to call `POST /api/run` (same backend and job store as MCP).
+- New job appears in left history; right drawer updates with latest results.
+- Selecting a history job or persisted circuit rehydrates the editable canvas model.
 
 ## Quickstart (local)
 
