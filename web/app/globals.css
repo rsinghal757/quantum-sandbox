@@ -300,7 +300,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  overflow: hidden;
+  overflow: auto;
+  padding-right: var(--space-1);
+}
+
+.studio-center > * {
+  flex-shrink: 0;
 }
 
 .studio-card {
@@ -369,8 +374,10 @@ body {
 }
 
 .studio-canvas-card {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
 }
 
 .studio-toolbar {
@@ -401,23 +408,27 @@ body {
 }
 
 .studio-canvas-viewport {
-  flex: 1;
-  min-height: 460px;
-  max-height: 620px;
+  flex: 0 0 auto;
+  height: clamp(460px, 56vh, 620px);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-muted);
   overflow: auto;
   padding: var(--space-2);
+  position: relative;
+  isolation: isolate;
+  z-index: 1;
 }
 
 .studio-canvas-shell {
   position: relative;
+  min-height: 100%;
 }
 
 .studio-canvas-content {
   position: relative;
   transform-origin: top left;
+  isolation: isolate;
 }
 
 .studio-wire {
@@ -546,6 +557,10 @@ body {
 
 .studio-code-drawer {
   flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  isolation: isolate;
+  background: var(--surface);
 }
 
 .studio-code-drawer.closed {
@@ -571,6 +586,8 @@ body {
   flex-direction: column;
   padding: var(--space-3);
   transition: width 0.2s ease;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .studio-results.collapsed {
@@ -785,7 +802,17 @@ body {
 
   .studio-results-body,
   .studio-rail-list,
-  .studio-canvas-viewport {
+  .studio-canvas-viewport,
+  .studio-center {
     max-height: none;
+  }
+
+  .studio-center {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .studio-canvas-viewport {
+    height: 420px;
   }
 }
