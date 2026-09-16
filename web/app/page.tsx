@@ -675,10 +675,10 @@ export default function StudioPage() {
 
   const metrics = useMemo(() => {
     const leftPad = 92;
-    const topPad = 48;
-    const rowGap = 54;
-    const colWidth = 72;
-    const classicalGap = 50;
+    const topPad = 44;
+    const rowGap = 48;
+    const colWidth = 64;
+    const classicalGap = 48;
     const baseColumns = Math.max(circuit.layers.length + 4, 24);
     const width = leftPad + baseColumns * colWidth + 40;
     const height = topPad + Math.max(circuit.numQubits - 1, 0) * rowGap + classicalGap + Math.max(circuit.numClbits - 1, 0) * rowGap + 70;
@@ -690,8 +690,8 @@ export default function StudioPage() {
       classicalGap,
       width,
       height,
-      chipWidth: 42,
-      chipHeight: 32,
+      chipWidth: 36,
+      chipHeight: 28,
     };
   }, [circuit.layers.length, circuit.numQubits, circuit.numClbits]);
 
@@ -1122,6 +1122,8 @@ export default function StudioPage() {
                     width: `${metrics.width}px`,
                     height: `${metrics.height}px`,
                     transform: `scale(${zoom})`,
+                    ['--layer-step' as string]: `${metrics.colWidth}px`,
+                    ['--layer-offset' as string]: `${metrics.leftPad + metrics.chipWidth / 2}px`,
                   }}
                 >
                   {Array.from({ length: circuit.numQubits }).map((_, qubit) => (
@@ -1154,8 +1156,10 @@ export default function StudioPage() {
 
                   {visibleLayers.map(({ layerIndex, op }) => {
                     const x = metrics.leftPad + layerIndex * metrics.colWidth;
+                    const centerX = x + metrics.chipWidth / 2;
                     const chipColor = gateByKey(op.gate)?.color ?? '#77839a';
                     const style = { '--chip': chipColor } as CSSProperties;
+                    const selected = selectedOpId === op.id;
 
                     const qubitYs = op.qubits.map(yForQubit);
                     const clbitYs = op.clbits.map(yForClbit);
@@ -1168,14 +1172,33 @@ export default function StudioPage() {
                         event.dataTransfer.setData('application/x-qs-op', op.id);
                       },
                     };
+                    const onSelect = (event: { stopPropagation: () => void }) => {
+                      event.stopPropagation();
+                      setSelectedOpId(op.id);
+                    };
 
                     if (op.gate === 'barrier') {
                       return (
-                        <div
-                          key={op.id}
-                          className="studio-barrier"
-                          style={{ left: `${x + metrics.chipWidth / 2}px`, top: `${connectorMin - 20}px`, height: `${connectorMax - connectorMin + 40}px` }}
-                        />
+                        <div key={op.id} className="studio-op-layer" style={style}>
+                          <div
+                            className="studio-barrier"
+                            style={{
+                              left: `${centerX}px`,
+                              top: `${connectorMin - 20}px`,
+                              height: `${connectorMax - connectorMin + 40}px`,
+                            }}
+                          />
+                          <button
+                            type="button"
+                            {...dragAttrs}
+                            className={`studio-op-handle barrier ${selected ? 'selected' : ''}`}
+                            style={{ left: `${centerX - 8}px`, top: `${connectorMin - 26}px` }}
+                            onClick={onSelect}
+                            aria-label="Barrier gate"
+                          >
+                            ||
+                          </button>
+                        </div>
                       );
                     }
 
@@ -1184,26 +1207,33 @@ export default function StudioPage() {
                         {op.qubits.length > 1 ? (
                           <div
                             className="studio-op-connector"
-                            style={{ left: `${x + metrics.chipWidth / 2}px`, top: `${connectorMin}px`, height: `${connectorMax - connectorMin}px` }}
+                            style={{ left: `${centerX}px`, top: `${connectorMin}px`, height: `${connectorMax - connectorMin}px` }}
                           />
                         ) : null}
 
                         {op.gate === 'cx' && op.qubits.length === 2 ? (
                           <>
-                            <div className="studio-control-dot" style={{ left: `${x + 18}px`, top: `${qubitYs[0] - 5}px` }} />
-                            <div className="studio-target" style={{ left: `${x + 9}px`, top: `${qubitYs[1] - 10}px` }} />
+                            <div className="studio-control-dot" style={{ left: `${centerX - 4.5}px`, top: `${qubitYs[0] - 4.5}px` }} />
+                            <button
+                              type="button"
+                              {...dragAttrs}
+                              className={`studio-target-button ${selected ? 'selected' : ''}`}
+                              style={{ left: `${centerX - 10}px`, top: `${qubitYs[1] - 10}px` }}
+                              onClick={onSelect}
+                              aria-label="CX gate"
+                            />
                           </>
                         ) : null}
 
                         {op.gate === 'cz' && op.qubits.length === 2 ? (
                           <>
-                            <div className="studio-control-dot" style={{ left: `${x + 18}px`, top: `${qubitYs[0] - 5}px` }} />
+                            <div className="studio-control-dot" style={{ left: `${centerX - 4.5}px`, top: `${qubitYs[0] - 4.5}px` }} />
                             <button
                               type="button"
                               {...dragAttrs}
-                              className={`studio-gate-chip ${selectedOpId === op.id ? 'selected' : ''}`}
+                              className={`studio-gate-chip ${selected ? 'selected' : ''}`}
                               style={{ left: `${x}px`, top: `${qubitYs[1] - metrics.chipHeight / 2}px` }}
-                              onClick={() => setSelectedOpId(op.id)}
+                              onClick={onSelect}
                             >
                               Z
                             </button>
@@ -1212,16 +1242,31 @@ export default function StudioPage() {
 
                         {op.gate === 'ccx' && op.qubits.length === 3 ? (
                           <>
-                            <div className="studio-control-dot" style={{ left: `${x + 18}px`, top: `${qubitYs[0] - 5}px` }} />
-                            <div className="studio-control-dot" style={{ left: `${x + 18}px`, top: `${qubitYs[1] - 5}px` }} />
-                            <div className="studio-target" style={{ left: `${x + 9}px`, top: `${qubitYs[2] - 10}px` }} />
+                            <div className="studio-control-dot" style={{ left: `${centerX - 4.5}px`, top: `${qubitYs[0] - 4.5}px` }} />
+                            <div className="studio-control-dot" style={{ left: `${centerX - 4.5}px`, top: `${qubitYs[1] - 4.5}px` }} />
+                            <button
+                              type="button"
+                              {...dragAttrs}
+                              className={`studio-target-button ${selected ? 'selected' : ''}`}
+                              style={{ left: `${centerX - 10}px`, top: `${qubitYs[2] - 10}px` }}
+                              onClick={onSelect}
+                              aria-label="CCX gate"
+                            />
                           </>
                         ) : null}
 
                         {op.gate === 'swap' && op.qubits.length === 2 ? (
                           <>
-                            <div className="studio-swap-mark" style={{ left: `${x + 16}px`, top: `${qubitYs[0] - 8}px` }}>×</div>
-                            <div className="studio-swap-mark" style={{ left: `${x + 16}px`, top: `${qubitYs[1] - 8}px` }}>×</div>
+                            <div className="studio-swap-mark" style={{ left: `${centerX - 7}px`, top: `${qubitYs[0] - 8}px` }}>×</div>
+                            <div className="studio-swap-mark" style={{ left: `${centerX - 7}px`, top: `${qubitYs[1] - 8}px` }}>×</div>
+                            <button
+                              type="button"
+                              {...dragAttrs}
+                              className={`studio-op-handle swap ${selected ? 'selected' : ''}`}
+                              style={{ left: `${centerX - 8}px`, top: `${(qubitYs[0] + qubitYs[1]) / 2 - 8}px` }}
+                              onClick={onSelect}
+                              aria-label="SWAP gate"
+                            />
                           </>
                         ) : null}
 
@@ -1235,9 +1280,9 @@ export default function StudioPage() {
                                 <button
                                   type="button"
                                   {...dragAttrs}
-                                  className={`studio-gate-chip measure ${selectedOpId === op.id ? 'selected' : ''}`}
+                                  className={`studio-gate-chip measure ${selected ? 'selected' : ''}`}
                                   style={{ left: `${x}px`, top: `${chipY - metrics.chipHeight / 2}px` }}
-                                  onClick={() => setSelectedOpId(op.id)}
+                                  onClick={onSelect}
                                 >
                                   M
                                 </button>
@@ -1245,7 +1290,7 @@ export default function StudioPage() {
                                   <div
                                     className="studio-measure-link"
                                     style={{
-                                      left: `${x + metrics.chipWidth}px`,
+                                      left: `${centerX}px`,
                                       top: `${Math.min(chipY, clbitY)}px`,
                                       height: `${Math.abs(clbitY - chipY)}px`,
                                     }}
@@ -1266,9 +1311,9 @@ export default function StudioPage() {
                                   key={`${op.id}-${qubit}`}
                                   type="button"
                                   {...dragAttrs}
-                                  className={`studio-gate-chip ${selectedOpId === op.id ? 'selected' : ''}`}
+                                  className={`studio-gate-chip ${selected ? 'selected' : ''}`}
                                   style={{ left: `${x}px`, top: `${chipY - metrics.chipHeight / 2}px` }}
-                                  onClick={() => setSelectedOpId(op.id)}
+                                  onClick={onSelect}
                                 >
                                   <span>{label}</span>
                                   {param !== undefined ? <small>{param.toFixed(2)}</small> : null}
