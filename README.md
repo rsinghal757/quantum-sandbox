@@ -72,18 +72,17 @@ Defaults:
 
 ## Quantum Sandbox Studio (web)
 
-The `/` web app is now **Quantum Sandbox Studio**: a calm 3-zone editor/inspection product
-served as static export from `web/out` by the Python host.
+The `/` web app is now **Quantum Sandbox Studio** with a Composer-style shell, still served
+as static export from `web/out` by the Python host.
 
 ### Studio information architecture
 
-1. **Left rail** (history): compact searchable Jobs/Circuits timeline from shared SQLite.
-2. **Center hero**:
-   - color-coded gate palette
-   - editable quantum circuit canvas (drag/drop gate placement, gate move/delete, param edit)
-   - run toolbar (shots, run, undo/redo, qubit add/remove, zoom controls)
-3. **Right drawer** (collapsible): focused run results (histogram, probability table, Bloch).
-4. **Code drawer** (secondary): OpenQASM, Qiskit sketch, structured gates JSON with copy.
+1. **Left rail**: operations palette in a clean icon grid + searchable Jobs/Circuits history.
+2. **Center**: editable circuit composer canvas with clear `q[i]`/`c[i]` wires, Qiskit-style CNOT
+   and measurement glyphs, drag/drop placement, gate move/delete, param edit, and zoom controls.
+3. **Right pane**: live synchronized code panel (OpenQASM, Qiskit sketch, structured gates JSON).
+4. **Bottom zone**: side-by-side visualizations (histogram + probability table + Bloch vectors).
+5. **Top bar**: primary **Set up and run** CTA with refresh, auto-refresh, and theme controls.
 
 ### Studio interaction loop
 
