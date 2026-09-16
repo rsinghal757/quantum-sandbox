@@ -194,7 +194,7 @@ function HistogramChart({
   const yFor = (value: number) => chartHeight - (transformValue(value) / maxValue) * (chartHeight - 30);
 
   return (
-    <section className="panel">
+    <section className="panel panel-chart">
       <div className="panel-header">
         <h3>{title}</h3>
         <p>{mode === 'counts' ? 'Counts' : 'Probabilities'} {logScale && mode === 'counts' ? '(log scale)' : ''}</p>
@@ -245,7 +245,7 @@ function HistogramChart({
 function ProbabilityTable({ rows }: { rows: DistributionRow[] }) {
   const topRows = rows.slice(0, 24);
   return (
-    <section className="panel">
+    <section className="panel panel-table">
       <div className="panel-header">
         <h3>Probabilities Table</h3>
         <p>Top basis states</p>
@@ -253,24 +253,26 @@ function ProbabilityTable({ rows }: { rows: DistributionRow[] }) {
       {topRows.length === 0 ? (
         <p className="muted">No probability rows available.</p>
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Basis state</th>
-              <th>Count</th>
-              <th>Probability</th>
-            </tr>
-          </thead>
-          <tbody>
-            {topRows.map((row) => (
-              <tr key={row.basis_state}>
-                <td>{row.basis_state}</td>
-                <td>{row.count ?? '—'}</td>
-                <td>{(row.probability * 100).toFixed(3)}%</td>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Basis state</th>
+                <th>Count</th>
+                <th>Probability</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {topRows.map((row) => (
+                <tr key={row.basis_state}>
+                  <td>{row.basis_state}</td>
+                  <td>{row.count ?? '—'}</td>
+                  <td>{(row.probability * 100).toFixed(3)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -308,7 +310,7 @@ function BlochPanel({ derived }: { derived?: DerivedPayload }) {
   const vectors = derived?.bloch_vectors ?? [];
   if (!vectors.length) {
     return (
-      <section className="panel">
+      <section className="panel panel-bloch">
         <div className="panel-header">
           <h3>Bloch Spheres</h3>
           <p>Single-qubit reduced state vectors</p>
@@ -321,7 +323,7 @@ function BlochPanel({ derived }: { derived?: DerivedPayload }) {
   }
 
   return (
-    <section className="panel">
+    <section className="panel panel-bloch">
       <div className="panel-header">
         <h3>Bloch Spheres</h3>
         <p>Source: {derived?.statevector_source ?? 'unknown'}</p>
@@ -338,14 +340,7 @@ function BlochPanel({ derived }: { derived?: DerivedPayload }) {
 function AmplitudeChart({ amplitudes, mode }: { amplitudes: AmplitudeRow[]; mode: AmpMode }) {
   const rows = amplitudes.slice(0, 20);
   if (!rows.length) {
-    return (
-      <section className="panel">
-        <div className="panel-header">
-          <h3>Statevector Amplitudes</h3>
-          <p>No amplitudes available</p>
-        </div>
-      </section>
-    );
+    return <p className="muted">No amplitudes available for this job.</p>;
   }
 
   const width = Math.max(700, rows.length * 42 + 80);
@@ -360,11 +355,7 @@ function AmplitudeChart({ amplitudes, mode }: { amplitudes: AmplitudeRow[]; mode
   }, 0.0001);
 
   return (
-    <section className="panel">
-      <div className="panel-header">
-        <h3>Statevector Amplitudes</h3>
-        <p>Top {rows.length} basis states</p>
-      </div>
+    <>
       <div className="chart-scroll">
         <svg viewBox={`0 0 ${width} ${height}`} className="amplitude-chart" aria-label="Amplitude chart">
           <line x1={40} y1={120} x2={width - 20} y2={120} className="axis" />
@@ -404,7 +395,7 @@ function AmplitudeChart({ amplitudes, mode }: { amplitudes: AmplitudeRow[]; mode
           })}
         </svg>
       </div>
-    </section>
+    </>
   );
 }
 
@@ -582,7 +573,7 @@ function CircuitDiagram({ circuit }: { circuit?: CircuitPayload }) {
 
   if (!circuit) {
     return (
-      <section className="panel">
+      <section className="panel panel-circuit">
         <div className="panel-header">
           <h3>Circuit Diagram</h3>
           <p>No circuit data</p>
@@ -592,7 +583,7 @@ function CircuitDiagram({ circuit }: { circuit?: CircuitPayload }) {
   }
 
   return (
-    <section className="panel">
+    <section className="panel panel-circuit">
       <div className="panel-header circuit-header">
         <div>
           <h3>Circuit Canvas</h3>
@@ -948,7 +939,7 @@ function renderHighlightedLine(line: string, lineNumber: number) {
 function CodePanel({ title, code, language }: { title: string; code: string; language: 'qasm' | 'json' | 'python' }) {
   const lines = code.split('\n');
   return (
-    <section className="panel">
+    <section className="panel panel-code">
       <div className="panel-header inline-controls">
         <div>
           <h3>{title}</h3>
@@ -992,7 +983,7 @@ export default function HomePage() {
   const [dateEnd, setDateEnd] = useState('');
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [theme, setTheme] = useState<ThemeMode>('light');
   const [valueMode, setValueMode] = useState<ValueMode>('counts');
   const [logScale, setLogScale] = useState(false);
   const [ampMode, setAmpMode] = useState<AmpMode>('|amp|^2');
@@ -1006,7 +997,7 @@ export default function HomePage() {
       setTheme(stored);
       document.documentElement.dataset.theme = stored;
     } else {
-      document.documentElement.dataset.theme = 'dark';
+      document.documentElement.dataset.theme = 'light';
     }
   }, []);
 
@@ -1294,17 +1285,17 @@ export default function HomePage() {
         </div>
       </section>
 
-      {error ? <section className="panel error-panel">{error}</section> : null}
-      {loading ? <section className="panel loading-panel">Loading research jobs…</section> : null}
+      {error ? <section className="panel panel-alert error-panel">{error}</section> : null}
+      {loading ? <section className="panel panel-alert loading-panel">Loading research jobs…</section> : null}
       {!loading && filteredJobs.length === 0 ? (
-        <section className="panel empty-state">
+        <section className="panel panel-alert empty-state">
           <h2>No jobs match current filters</h2>
           <p>Run circuits through MCP or adjust filters to populate this console.</p>
         </section>
       ) : null}
 
       <section className="workspace-layout">
-        <section className="panel jobs-panel" aria-label="Jobs list">
+        <section className="panel jobs-panel panel-jobs" aria-label="Jobs list">
           <div className="panel-header inline-controls">
             <div>
               <h2>Jobs</h2>
@@ -1343,7 +1334,7 @@ export default function HomePage() {
         </section>
 
         <section className="detail-stack">
-          <section className="panel">
+          <section className="panel panel-meta">
             <div className="panel-header inline-controls">
               <div>
                 <h2>Job details</h2>
@@ -1427,37 +1418,39 @@ export default function HomePage() {
           />
 
           {compareStateRows.length > 0 ? (
-            <section className="panel">
+            <section className="panel panel-table">
               <div className="panel-header">
                 <h3>Job compare diff</h3>
                 <p>Primary minus comparison counts</p>
               </div>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Basis state</th>
-                    <th>Primary</th>
-                    <th>Comparison</th>
-                    <th>Diff</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {compareStateRows.map((row) => (
-                    <tr key={row.basis_state}>
-                      <td>{row.basis_state}</td>
-                      <td>{row.primary}</td>
-                      <td>{row.secondary}</td>
-                      <td>{row.diff >= 0 ? `+${row.diff}` : row.diff}</td>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Basis state</th>
+                      <th>Primary</th>
+                      <th>Comparison</th>
+                      <th>Diff</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {compareStateRows.map((row) => (
+                      <tr key={row.basis_state}>
+                        <td>{row.basis_state}</td>
+                        <td>{row.primary}</td>
+                        <td>{row.secondary}</td>
+                        <td>{row.diff >= 0 ? `+${row.diff}` : row.diff}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           ) : null}
 
           <ProbabilityTable rows={distribution} />
 
-          <section className="panel">
+          <section className="panel panel-chart panel-amplitude">
             <div className="panel-header inline-controls">
               <div>
                 <h3>Amplitude view</h3>
@@ -1477,7 +1470,7 @@ export default function HomePage() {
           <BlochPanel derived={selectedJob?.derived} />
 
           {replaySummary ? (
-            <section className="panel">
+            <section className="panel panel-json">
               <div className="panel-header">
                 <h3>Replay summary</h3>
                 <p>Algorithm-focused metadata for reproducibility</p>
@@ -1500,7 +1493,7 @@ export default function HomePage() {
             language="python"
           />
 
-          <section className="panel">
+          <section className="panel panel-json">
             <div className="panel-header">
               <h3>Metadata JSON</h3>
               <p>Input payload and run metadata</p>

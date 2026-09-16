@@ -70,7 +70,7 @@ The `/` dashboard is a static-export Next.js research console served by the Pyth
 
 ### Shipped UX capabilities
 
-- Dark-mode-first layout with persisted light/dark toggle
+- Light-mode-first layout (Qiskit-style) with persisted light/dark toggle
 - Jobs table with search, status/backend filters, date range, and sorting
 - Deep-linkable jobs (`/jobs/<job_id>`) with server-side index fallback
 - Auto-refresh + manual refresh controls
@@ -81,6 +81,7 @@ The `/` dashboard is a static-export Next.js research console served by the Pyth
   - horizontal + vertical pan/scroll
   - zoom in/out, fit-to-width, reset view
   - overview/detail mode toggle + layer scrubber for depth-heavy circuits
+- Console shell keeps scroll contained in panels (jobs list, circuit, charts, code viewers)
 - Histogram charts for counts/probabilities with optional log-scale counts
 - Side-by-side job comparison overlay + count-diff table
 - Probability table, amplitude views (`|amp|^2` and real/imag), Bloch spheres
