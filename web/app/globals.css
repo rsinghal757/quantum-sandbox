@@ -364,9 +364,59 @@ select:focus-visible {
 }
 
 .histogram,
-.amplitude-chart,
-.circuit-diagram {
+.amplitude-chart {
   min-width: 100%;
+  display: block;
+}
+
+.circuit-header {
+  margin-bottom: 0.5rem;
+}
+
+.circuit-controls {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.circuit-status-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.84rem;
+  margin-bottom: 0.55rem;
+}
+
+.circuit-status-row p {
+  margin: 0;
+}
+
+.circuit-scrubber {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 0.65rem;
+}
+
+.circuit-viewport {
+  overflow: auto;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg), black 6%), color-mix(in srgb, var(--bg), black 2%));
+  height: min(70vh, 640px);
+  min-height: 420px;
+  padding: 0.65rem;
+}
+
+.circuit-viewport:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent), white 20%);
+  outline-offset: 2px;
+}
+
+.circuit-canvas {
   display: block;
 }
 
@@ -477,42 +527,74 @@ select:focus-visible {
 }
 
 .wire {
-  stroke: color-mix(in srgb, var(--muted), transparent 20%);
-  stroke-width: 2;
+  stroke: color-mix(in srgb, var(--muted), transparent 16%);
+  stroke-width: 2.2;
 }
 
 .wire.classical {
-  stroke-dasharray: 6 4;
+  stroke-dasharray: 8 5;
 }
 
 .wire-label {
-  fill: var(--muted);
-  font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.gate-box {
-  fill: color-mix(in srgb, var(--accent), transparent 82%);
-  stroke: color-mix(in srgb, var(--accent), white 15%);
-  stroke-width: 1;
-}
-
-.gate-box.measurement {
-  fill: color-mix(in srgb, var(--accent-alt), transparent 80%);
-  stroke: color-mix(in srgb, var(--accent-alt), white 15%);
-}
-
-.gate-text {
-  fill: var(--text);
-  font-size: 10px;
+  fill: color-mix(in srgb, var(--text), var(--muted) 55%);
+  font-size: 12px;
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.gate-chip {
+  fill: color-mix(in srgb, var(--chip-color), transparent 78%);
+  stroke: color-mix(in srgb, var(--chip-color), white 16%);
+  stroke-width: 1.25;
+}
+
+.gate-chip.measurement {
+  fill: color-mix(in srgb, var(--chip-color), transparent 74%);
+  stroke: color-mix(in srgb, var(--chip-color), white 12%);
+}
+
+.gate-chip-label {
+  fill: color-mix(in srgb, var(--text), white 8%);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.gate-chip-sub {
+  fill: color-mix(in srgb, var(--text), var(--muted) 42%);
+  font-size: 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .gate-link,
-.measure-line {
+.measure-line,
+.barrier-line {
   stroke: color-mix(in srgb, var(--muted), transparent 35%);
   stroke-width: 1.5;
+}
+
+.barrier-line {
+  stroke-dasharray: 4 4;
+}
+
+.control-dot {
+  fill: color-mix(in srgb, var(--chip-color), white 12%);
+  stroke: color-mix(in srgb, var(--chip-color), white 20%);
+  stroke-width: 1;
+}
+
+.target-circle {
+  fill: color-mix(in srgb, var(--chip-color), transparent 88%);
+  stroke: color-mix(in srgb, var(--chip-color), white 15%);
+  stroke-width: 1.4;
+}
+
+.target-plus,
+.swap-mark {
+  stroke: color-mix(in srgb, var(--chip-color), white 15%);
+  stroke-width: 1.6;
+  stroke-linecap: round;
 }
 
 .code-viewer {

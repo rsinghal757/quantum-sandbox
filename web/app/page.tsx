@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 
 type Job = {
   id: string;
@@ -84,6 +84,8 @@ const MAX_CHART_STATES = 20;
 const TOKEN_RE = /(->|"(?:[^"\\]|\\.)*"|\b[A-Za-z_][A-Za-z0-9_]*\b|\d+\.\d+|\d+|\S)/g;
 const QASM_KEYWORDS = new Set(['OPENQASM', 'include', 'qubit', 'bit', 'qreg', 'creg', 'measure', 'barrier', 'gate', 'if']);
 const QASM_GATES = new Set(['h', 'x', 'y', 'z', 'rx', 'ry', 'rz', 'u', 'u1', 'u2', 'u3', 'cx', 'cy', 'cz', 'swap', 'sx', 'cp', 'crx', 'cry', 'crz']);
+const CONTROLLED_GATES = new Set(['cx', 'cy', 'cz', 'ch', 'cp', 'crx', 'cry', 'crz']);
+const PARAMETERIZED_GATES = new Set(['rx', 'ry', 'rz', 'p', 'u', 'u1', 'u2', 'u3', 'cp', 'crx', 'cry', 'crz']);
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return 'n/a';
@@ -406,7 +408,178 @@ function AmplitudeChart({ amplitudes, mode }: { amplitudes: AmplitudeRow[]; mode
   );
 }
 
+const gateChipColor = (gateName: string): string => {
+  if (gateName === 'measure') return '#f59e0b';
+  if (gateName === 'swap') return '#f97316';
+  if (gateName === 'barrier') return '#64748b';
+  if (CONTROLLED_GATES.has(gateName) || gateName === 'ccx') return '#34d399';
+  if (gateName === 'h' || gateName === 'sx') return '#22d3ee';
+  if (['x', 'y', 'z'].includes(gateName)) return '#60a5fa';
+  if (['s', 'sdg', 't', 'tdg'].includes(gateName)) return '#a78bfa';
+  if (PARAMETERIZED_GATES.has(gateName)) return '#fb7185';
+  return '#94a3b8';
+};
+
+const gateLabel = (operation: CircuitOperation): { main: string; sub: string | null } => {
+  const gateName = operation.name.toLowerCase();
+  const main = gateName.toUpperCase();
+  if (!PARAMETERIZED_GATES.has(gateName) || operation.params.length === 0) {
+    return { main, sub: null };
+  }
+  const firstParam = operation.params[0];
+  const rendered = typeof firstParam === 'number' ? firstParam.toFixed(2) : String(firstParam);
+  return { main, sub: rendered.length > 9 ? `${rendered.slice(0, 9)}…` : rendered };
+};
+
 function CircuitDiagram({ circuit }: { circuit?: CircuitPayload }) {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [viewMode, setViewMode] = useState<'detail' | 'overview'>('detail');
+  const [viewportState, setViewportState] = useState({ width: 900, height: 560, scrollLeft: 0, scrollTop: 0 });
+
+  const minZoom = viewMode === 'detail' ? 0.45 : 0.25;
+  const maxZoom = viewMode === 'detail' ? 2.5 : 1.4;
+
+  useEffect(() => {
+    setZoom((previous) => clamp(previous, minZoom, maxZoom));
+  }, [minZoom, maxZoom]);
+
+  const layers = circuit?.layers ?? [];
+  const qRows = circuit?.num_qubits ?? 0;
+  const cRows = circuit?.num_clbits ?? 0;
+
+  const metrics = useMemo(() => {
+    const detail = viewMode === 'detail';
+    const rowGap = detail ? 62 : 36;
+    const colWidth = detail ? 78 : 40;
+    const gateWidth = detail ? 42 : 22;
+    const gateHeight = detail ? 36 : 18;
+    const topPad = detail ? 56 : 36;
+    const leftPad = detail ? 106 : 82;
+    const classicalGap = detail ? 52 : 26;
+    const bottomPad = detail ? 42 : 24;
+    const contentWidth = Math.max(920, leftPad + layers.length * colWidth + 80);
+    const contentHeight =
+      topPad +
+      Math.max(qRows - 1, 0) * rowGap +
+      (cRows > 0 ? classicalGap + Math.max(cRows - 1, 0) * rowGap : 0) +
+      bottomPad;
+    return {
+      detail,
+      rowGap,
+      colWidth,
+      gateWidth,
+      gateHeight,
+      topPad,
+      leftPad,
+      classicalGap,
+      bottomPad,
+      contentWidth,
+      contentHeight,
+      fontSize: detail ? 10 : 8,
+      subFontSize: detail ? 8 : 0,
+    };
+  }, [cRows, layers.length, qRows, viewMode]);
+
+  const yForQubit = useCallback(
+    (index: number) => metrics.topPad + index * metrics.rowGap,
+    [metrics.rowGap, metrics.topPad],
+  );
+  const yForClbit = useCallback(
+    (index: number) =>
+      metrics.topPad + Math.max(qRows - 1, 0) * metrics.rowGap + metrics.classicalGap + index * metrics.rowGap,
+    [metrics.classicalGap, metrics.rowGap, metrics.topPad, qRows],
+  );
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+
+    const update = () => {
+      setViewportState({
+        width: viewport.clientWidth,
+        height: viewport.clientHeight,
+        scrollLeft: viewport.scrollLeft,
+        scrollTop: viewport.scrollTop,
+      });
+    };
+
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [metrics.contentWidth, metrics.contentHeight]);
+
+  const onViewportScroll = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    setViewportState((previous) => ({
+      ...previous,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    }));
+  }, []);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTo({ left: 0, top: 0 });
+  }, [circuit?.depth, circuit?.num_qubits, circuit?.num_clbits]);
+
+  const columnPixels = metrics.colWidth * zoom;
+  const visibleStart = Math.max(0, Math.floor(viewportState.scrollLeft / columnPixels) - 2);
+  const visibleEnd = Math.min(
+    Math.max(layers.length - 1, 0),
+    Math.ceil((viewportState.scrollLeft + viewportState.width) / columnPixels) + 2,
+  );
+  const layerIndices = useMemo(() => {
+    if (layers.length === 0) return [];
+    return Array.from({ length: visibleEnd - visibleStart + 1 }, (_, index) => visibleStart + index);
+  }, [layers.length, visibleEnd, visibleStart]);
+
+  const zoomIn = () => setZoom((previous) => clamp(previous * 1.2, minZoom, maxZoom));
+  const zoomOut = () => setZoom((previous) => clamp(previous / 1.2, minZoom, maxZoom));
+  const resetView = () => {
+    setZoom(1);
+    const viewport = viewportRef.current;
+    viewport?.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+  };
+  const fitToWidth = () => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const available = Math.max(viewport.clientWidth - 28, 300);
+    const fitted = clamp(available / metrics.contentWidth, minZoom, maxZoom);
+    setZoom(fitted);
+    viewport.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+  };
+
+  const scrubberMax = Math.max(layers.length - 1, 0);
+  const scrubberValue = scrubberMax === 0 ? 0 : Math.min(scrubberMax, Math.round(viewportState.scrollLeft / columnPixels));
+  const onScrubberChange = (value: number) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTo({ left: value * columnPixels, behavior: 'auto' });
+  };
+
+  const onViewportKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const horizontalStep = columnPixels * 2;
+    const verticalStep = metrics.rowGap * zoom * 1.5;
+    if (event.key === 'ArrowRight') {
+      viewport.scrollBy({ left: horizontalStep, behavior: 'smooth' });
+      event.preventDefault();
+    } else if (event.key === 'ArrowLeft') {
+      viewport.scrollBy({ left: -horizontalStep, behavior: 'smooth' });
+      event.preventDefault();
+    } else if (event.key === 'ArrowDown') {
+      viewport.scrollBy({ top: verticalStep, behavior: 'smooth' });
+      event.preventDefault();
+    } else if (event.key === 'ArrowUp') {
+      viewport.scrollBy({ top: -verticalStep, behavior: 'smooth' });
+      event.preventDefault();
+    }
+  };
+
   if (!circuit) {
     return (
       <section className="panel">
@@ -418,76 +591,280 @@ function CircuitDiagram({ circuit }: { circuit?: CircuitPayload }) {
     );
   }
 
-  const layers = circuit.layers ?? [];
-  const qRows = circuit.num_qubits;
-  const cRows = circuit.num_clbits;
-  const rowHeight = 42;
-  const laneGap = 18;
-  const colWidth = 86;
-  const leftPad = 80;
-  const topPad = 40;
-  const wireRows = qRows + cRows;
-  const chartHeight = topPad + wireRows * rowHeight + laneGap;
-  const chartWidth = Math.max(740, leftPad + layers.length * colWidth + 64);
-
-  const yForQubit = (index: number) => topPad + index * rowHeight;
-  const yForClbit = (index: number) => topPad + qRows * rowHeight + laneGap + index * rowHeight;
-
   return (
     <section className="panel">
-      <div className="panel-header">
-        <h3>Circuit Diagram</h3>
-        <p>{layers.length} layered columns · depth {circuit.depth}</p>
+      <div className="panel-header circuit-header">
+        <div>
+          <h3>Circuit Canvas</h3>
+          <p>
+            {layers.length} layers · depth {circuit.depth} · zoom {(zoom * 100).toFixed(0)}%
+          </p>
+        </div>
+        <div className="circuit-controls">
+          <button type="button" className="ghost-button" onClick={zoomOut} aria-label="Zoom out">
+            −
+          </button>
+          <button type="button" className="ghost-button" onClick={zoomIn} aria-label="Zoom in">
+            +
+          </button>
+          <button type="button" className="ghost-button" onClick={fitToWidth}>
+            Fit width
+          </button>
+          <button type="button" className="ghost-button" onClick={resetView}>
+            Reset
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => setViewMode((previous) => (previous === 'detail' ? 'overview' : 'detail'))}
+          >
+            {viewMode === 'detail' ? 'Overview mode' : 'Detail mode'}
+          </button>
+        </div>
       </div>
-      <div className="chart-scroll">
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="circuit-diagram" aria-label="Quantum circuit diagram">
+
+      <div className="circuit-status-row">
+        <p>
+          Rendering layers <strong>{visibleStart + 1}</strong>–<strong>{visibleEnd + 1}</strong> of{' '}
+          <strong>{layers.length}</strong>
+        </p>
+        <p>Use mouse/trackpad scroll, drag scrollbar, or arrow keys to pan.</p>
+      </div>
+
+      {scrubberMax > 0 ? (
+        <label className="circuit-scrubber">
+          Layer scrubber
+          <input
+            type="range"
+            min={0}
+            max={scrubberMax}
+            value={scrubberValue}
+            onChange={(event) => onScrubberChange(Number(event.target.value))}
+          />
+        </label>
+      ) : null}
+
+      <div
+        ref={viewportRef}
+        className="circuit-viewport"
+        onScroll={onViewportScroll}
+        onKeyDown={onViewportKeyDown}
+        tabIndex={0}
+        aria-label="Interactive circuit canvas. Use arrow keys to pan."
+      >
+        <svg
+          width={Math.ceil(metrics.contentWidth * zoom)}
+          height={Math.ceil(metrics.contentHeight * zoom)}
+          viewBox={`0 0 ${metrics.contentWidth} ${metrics.contentHeight}`}
+          className="circuit-canvas"
+          role="img"
+          aria-label="Interactive quantum circuit diagram"
+        >
           {Array.from({ length: qRows }).map((_, index) => (
             <g key={`q-${index}`}>
-              <line x1={leftPad - 20} y1={yForQubit(index)} x2={chartWidth - 20} y2={yForQubit(index)} className="wire" />
-              <text x={12} y={yForQubit(index) + 4} className="wire-label">q{index}</text>
-            </g>
-          ))}
-          {Array.from({ length: cRows }).map((_, index) => (
-            <g key={`c-${index}`}>
-              <line x1={leftPad - 20} y1={yForClbit(index)} x2={chartWidth - 20} y2={yForClbit(index)} className="wire classical" />
-              <text x={12} y={yForClbit(index) + 4} className="wire-label">c{index}</text>
+              <line
+                x1={metrics.leftPad - 16}
+                y1={yForQubit(index)}
+                x2={metrics.contentWidth - 20}
+                y2={yForQubit(index)}
+                className="wire"
+              />
+              <text x={14} y={yForQubit(index) + 4} className="wire-label">
+                q{index}
+              </text>
             </g>
           ))}
 
-          {layers.map((layer, layerIndex) => {
-            const x = leftPad + layerIndex * colWidth;
+          {Array.from({ length: cRows }).map((_, index) => (
+            <g key={`c-${index}`}>
+              <line
+                x1={metrics.leftPad - 16}
+                y1={yForClbit(index)}
+                x2={metrics.contentWidth - 20}
+                y2={yForClbit(index)}
+                className="wire classical"
+              />
+              <text x={14} y={yForClbit(index) + 4} className="wire-label">
+                c{index}
+              </text>
+            </g>
+          ))}
+
+          {layerIndices.map((layerIndex) => {
+            const layer = layers[layerIndex];
+            const x = metrics.leftPad + layerIndex * metrics.colWidth + metrics.colWidth * 0.5;
             return (
               <g key={`layer-${layerIndex}`}>
-                {layer.map((operation, opIndex) => {
+                {layer.map((operation, operationIndex) => {
+                  const gateName = operation.name.toLowerCase();
+                  const chipColor = gateChipColor(gateName);
+                  const chipStyle = { '--chip-color': chipColor } as CSSProperties;
+                  const { main, sub } = gateLabel(operation);
                   const qubitYs = operation.qubits.map(yForQubit);
                   const clbitYs = operation.clbits.map(yForClbit);
                   const allYs = [...qubitYs, ...clbitYs];
-                  const minY = Math.min(...allYs);
-                  const maxY = Math.max(...allYs);
-                  const gateLabel = operation.name.toUpperCase();
+                  const minY = allYs.length ? Math.min(...allYs) : 0;
+                  const maxY = allYs.length ? Math.max(...allYs) : 0;
 
-                  return (
-                    <g key={`${layerIndex}-${opIndex}`}>
-                      {allYs.length > 1 ? (
-                        <line x1={x} y1={minY} x2={x} y2={maxY} className="gate-link" />
-                      ) : null}
+                  if (gateName === 'barrier') {
+                    const barrierMin = qubitYs.length ? Math.min(...qubitYs) : yForQubit(0);
+                    const barrierMax = qubitYs.length ? Math.max(...qubitYs) : yForQubit(Math.max(qRows - 1, 0));
+                    return (
+                      <g key={`${layerIndex}-barrier-${operationIndex}`}>
+                        <line
+                          x1={x}
+                          y1={barrierMin - metrics.gateHeight * 0.6}
+                          x2={x}
+                          y2={barrierMax + metrics.gateHeight * 0.6}
+                          className="barrier-line"
+                        />
+                      </g>
+                    );
+                  }
 
-                      {operation.qubits.map((qubit, qubitIndex) => {
-                        const y = yForQubit(qubit);
-                        if (operation.name === 'measure' && operation.clbits[qubitIndex] !== undefined) {
-                          const targetY = yForClbit(operation.clbits[qubitIndex]);
+                  if (gateName === 'measure') {
+                    return (
+                      <g key={`${layerIndex}-measure-${operationIndex}`}>
+                        {operation.qubits.map((qubit, index) => {
+                          const qubitY = yForQubit(qubit);
+                          const clbit = operation.clbits[index];
+                          const clbitY = clbit !== undefined ? yForClbit(clbit) : null;
                           return (
-                            <g key={`m-${qubit}-${qubitIndex}`}>
-                              <rect x={x - 16} y={y - 14} width={32} height={28} rx={6} className="gate-box measurement" />
-                              <text x={x} y={y + 5} textAnchor="middle" className="gate-text">M</text>
-                              <line x1={x + 16} y1={y} x2={x + 28} y2={targetY} className="measure-line" />
+                            <g key={`${layerIndex}-measure-${qubit}-${index}`} style={chipStyle}>
+                              <rect
+                                x={x - metrics.gateWidth * 0.52}
+                                y={qubitY - metrics.gateHeight * 0.5}
+                                width={metrics.gateWidth * 1.04}
+                                height={metrics.gateHeight}
+                                rx={metrics.detail ? 8 : 4}
+                                className="gate-chip measurement"
+                              />
+                              <text x={x} y={qubitY + 4} textAnchor="middle" className="gate-chip-label">
+                                M
+                              </text>
+                              {clbitY !== null ? (
+                                <line
+                                  x1={x + metrics.gateWidth * 0.55}
+                                  y1={qubitY}
+                                  x2={x + metrics.gateWidth * 0.96}
+                                  y2={clbitY}
+                                  className="measure-line"
+                                />
+                              ) : null}
                             </g>
                           );
-                        }
+                        })}
+                      </g>
+                    );
+                  }
+
+                  if (gateName === 'swap' && operation.qubits.length === 2) {
+                    const top = yForQubit(operation.qubits[0]);
+                    const bottom = yForQubit(operation.qubits[1]);
+                    const cross = metrics.gateHeight * 0.28;
+                    return (
+                      <g key={`${layerIndex}-swap-${operationIndex}`} style={chipStyle}>
+                        <line x1={x} y1={Math.min(top, bottom)} x2={x} y2={Math.max(top, bottom)} className="gate-link" />
+                        <line x1={x - cross} y1={top - cross} x2={x + cross} y2={top + cross} className="swap-mark" />
+                        <line x1={x - cross} y1={top + cross} x2={x + cross} y2={top - cross} className="swap-mark" />
+                        <line
+                          x1={x - cross}
+                          y1={bottom - cross}
+                          x2={x + cross}
+                          y2={bottom + cross}
+                          className="swap-mark"
+                        />
+                        <line
+                          x1={x - cross}
+                          y1={bottom + cross}
+                          x2={x + cross}
+                          y2={bottom - cross}
+                          className="swap-mark"
+                        />
+                      </g>
+                    );
+                  }
+
+                  if (gateName === 'cx' && operation.qubits.length === 2) {
+                    const controlY = yForQubit(operation.qubits[0]);
+                    const targetY = yForQubit(operation.qubits[1]);
+                    const targetRadius = metrics.gateHeight * 0.46;
+                    return (
+                      <g key={`${layerIndex}-cx-${operationIndex}`} style={chipStyle}>
+                        <line x1={x} y1={Math.min(controlY, targetY)} x2={x} y2={Math.max(controlY, targetY)} className="gate-link" />
+                        <circle cx={x} cy={controlY} r={metrics.detail ? 5 : 3} className="control-dot" />
+                        <circle cx={x} cy={targetY} r={targetRadius} className="target-circle" />
+                        <line x1={x - targetRadius * 0.6} y1={targetY} x2={x + targetRadius * 0.6} y2={targetY} className="target-plus" />
+                        <line x1={x} y1={targetY - targetRadius * 0.6} x2={x} y2={targetY + targetRadius * 0.6} className="target-plus" />
+                      </g>
+                    );
+                  }
+
+                  if (gateName === 'ccx' && operation.qubits.length === 3) {
+                    const [controlA, controlB, target] = operation.qubits;
+                    const yValues = [yForQubit(controlA), yForQubit(controlB), yForQubit(target)];
+                    const targetY = yValues[2];
+                    const targetRadius = metrics.gateHeight * 0.46;
+                    return (
+                      <g key={`${layerIndex}-ccx-${operationIndex}`} style={chipStyle}>
+                        <line x1={x} y1={Math.min(...yValues)} x2={x} y2={Math.max(...yValues)} className="gate-link" />
+                        <circle cx={x} cy={yValues[0]} r={metrics.detail ? 4.8 : 3} className="control-dot" />
+                        <circle cx={x} cy={yValues[1]} r={metrics.detail ? 4.8 : 3} className="control-dot" />
+                        <circle cx={x} cy={targetY} r={targetRadius} className="target-circle" />
+                        <line x1={x - targetRadius * 0.6} y1={targetY} x2={x + targetRadius * 0.6} y2={targetY} className="target-plus" />
+                        <line x1={x} y1={targetY - targetRadius * 0.6} x2={x} y2={targetY + targetRadius * 0.6} className="target-plus" />
+                      </g>
+                    );
+                  }
+
+                  if (CONTROLLED_GATES.has(gateName) && operation.qubits.length === 2) {
+                    const controlY = yForQubit(operation.qubits[0]);
+                    const targetY = yForQubit(operation.qubits[1]);
+                    const targetLabel = gateName === 'ch' ? 'H' : gateName.startsWith('c') ? gateName.slice(1).toUpperCase() : main;
+                    return (
+                      <g key={`${layerIndex}-ctrl-${operationIndex}`} style={chipStyle}>
+                        <line x1={x} y1={Math.min(controlY, targetY)} x2={x} y2={Math.max(controlY, targetY)} className="gate-link" />
+                        <circle cx={x} cy={controlY} r={metrics.detail ? 4.8 : 3.2} className="control-dot" />
+                        <rect
+                          x={x - metrics.gateWidth * 0.5}
+                          y={targetY - metrics.gateHeight * 0.5}
+                          width={metrics.gateWidth}
+                          height={metrics.gateHeight}
+                          rx={metrics.detail ? 8 : 4}
+                          className="gate-chip"
+                        />
+                        <text x={x} y={targetY + 4} textAnchor="middle" className="gate-chip-label">
+                          {targetLabel}
+                        </text>
+                      </g>
+                    );
+                  }
+
+                  return (
+                    <g key={`${layerIndex}-generic-${operationIndex}`} style={chipStyle}>
+                      {operation.qubits.length > 1 ? (
+                        <line x1={x} y1={minY} x2={x} y2={maxY} className="gate-link" />
+                      ) : null}
+                      {operation.qubits.map((qubit, qubitIndex) => {
+                        const y = yForQubit(qubit);
                         return (
-                          <g key={`q-${qubit}-${qubitIndex}`}>
-                            <rect x={x - 18} y={y - 14} width={36} height={28} rx={6} className="gate-box" />
-                            <text x={x} y={y + 5} textAnchor="middle" className="gate-text">{gateLabel}</text>
+                          <g key={`${layerIndex}-chip-${operationIndex}-${qubit}-${qubitIndex}`}>
+                            <rect
+                              x={x - metrics.gateWidth * 0.5}
+                              y={y - metrics.gateHeight * 0.5}
+                              width={metrics.gateWidth}
+                              height={metrics.gateHeight}
+                              rx={metrics.detail ? 8 : 4}
+                              className="gate-chip"
+                            />
+                            <text x={x} y={y + 2} textAnchor="middle" className="gate-chip-label">
+                              {main}
+                            </text>
+                            {sub && metrics.detail ? (
+                              <text x={x} y={y + 12} textAnchor="middle" className="gate-chip-sub">
+                                {sub}
+                              </text>
+                            ) : null}
                           </g>
                         );
                       })}

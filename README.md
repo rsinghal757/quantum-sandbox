@@ -75,7 +75,12 @@ The `/` dashboard is a static-export Next.js research console served by the Pyth
 - Deep-linkable jobs (`/jobs/<job_id>`) with server-side index fallback
 - Auto-refresh + manual refresh controls
 - Circuit summary cards (qubits, clbits, depth, size, gate counts)
-- Circuit visualization panel (wire/layer diagram with measurement mapping)
+- Circuit visualization panel (Qiskit Playground–style interactive circuit canvas)
+  - readable default gate spacing for deep circuits
+  - per-gate colored chips, controls/targets, measurement links
+  - horizontal + vertical pan/scroll
+  - zoom in/out, fit-to-width, reset view
+  - overview/detail mode toggle + layer scrubber for depth-heavy circuits
 - Histogram charts for counts/probabilities with optional log-scale counts
 - Side-by-side job comparison overlay + count-diff table
 - Probability table, amplitude views (`|amp|^2` and real/imag), Bloch spheres
@@ -87,7 +92,8 @@ The `/` dashboard is a static-export Next.js research console served by the Pyth
 ### Screenshot notes (what you should see)
 
 1. **Jobs Observatory (top)**: metric strip + refresh/theme controls + advanced filters.
-2. **Circuit Analysis (middle)**: summary cards and a Qiskit-style wire diagram.
+2. **Circuit Analysis (middle)**: summary cards and a full-height interactive circuit canvas
+   with zoom controls and a layer scrubber.
 3. **Measurement Analysis**: histogram/probability views and comparison diff table.
 4. **State Analysis**: Bloch sphere cards per qubit and amplitude charts when available.
 5. **Reproducibility**: OpenQASM + structured gates + Qiskit sketch + metadata JSON.
