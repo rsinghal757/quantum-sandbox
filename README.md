@@ -80,7 +80,8 @@ as static export from `web/out` by the Python host.
 1. **Left rail**: operations palette in a clean icon grid + searchable Jobs/Circuits history.
 2. **Center**: editable circuit composer canvas with clear `q[i]`/`c[i]` wires, Qiskit-style CNOT
    and measurement glyphs, drag/drop placement, gate move/delete, param edit, and zoom controls.
-3. **Right pane**: live synchronized code panel (OpenQASM, Qiskit sketch, structured gates JSON).
+3. **Right pane**: live synchronized **OpenQASM editor** (plus Qiskit sketch and structured
+   gates JSON tabs), with apply-to-canvas loop for code-first edits.
 4. **Bottom zone**: side-by-side visualizations (histogram + probability table + Bloch vectors).
 5. **Top bar**: primary **Set up and run** CTA with refresh, auto-refresh, and theme controls.
 

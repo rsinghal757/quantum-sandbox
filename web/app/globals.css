@@ -143,8 +143,8 @@ textarea {
 
 .studio-shell {
   display: grid;
-  grid-template-columns: minmax(260px, 280px) minmax(560px, 1fr) minmax(320px, 380px);
-  grid-template-rows: minmax(460px, 1fr) minmax(280px, 36vh);
+  grid-template-columns: minmax(264px, 292px) minmax(620px, 1fr) minmax(360px, 430px);
+  grid-template-rows: minmax(500px, 1fr) minmax(272px, 34vh);
   grid-template-areas:
     'left canvas code'
     'left viz viz';
@@ -312,6 +312,7 @@ textarea {
 .studio-canvas-toolbar {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 10px;
 }
 
@@ -362,8 +363,9 @@ textarea {
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 86%, white), var(--accent));
   color: white;
   border-color: color-mix(in srgb, var(--accent) 60%, black 12%);
-  padding-inline: 14px;
+  padding: 7px 15px;
   font-weight: 600;
+  letter-spacing: 0.01em;
   box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
@@ -563,6 +565,48 @@ textarea {
   grid-area: code;
 }
 
+.studio-code-panel .studio-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.studio-code-editor-wrap {
+  padding: 12px;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.studio-code-editor {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.48;
+  padding: 12px;
+  resize: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.studio-code-editor:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+
+.studio-code-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
 .studio-code-scroll {
   margin: 0;
   padding: 14px;
@@ -632,6 +676,11 @@ textarea {
   fill: var(--muted);
   font-size: 10px;
   font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+}
+
+.chart-empty {
+  fill: var(--muted);
+  font-size: 11px;
 }
 
 .studio-table-scroll {
@@ -722,7 +771,7 @@ textarea {
 
 @media (max-width: 1480px) {
   .studio-shell {
-    grid-template-columns: minmax(230px, 250px) minmax(420px, 1fr) minmax(280px, 320px);
+    grid-template-columns: minmax(230px, 250px) minmax(460px, 1fr) minmax(310px, 350px);
   }
 }
 

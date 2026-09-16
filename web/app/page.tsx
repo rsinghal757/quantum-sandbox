@@ -386,7 +386,7 @@ const circuitToQiskitSketch = (circuit: EditableCircuit) => {
 };
 
 function ResultsHistogram({ rows, mode }: { rows: DistributionRow[]; mode: ResultsMode }) {
-  const width = Math.max(520, rows.length * 42 + 60);
+  const width = Math.max(520, Math.max(rows.length, 2) * 42 + 60);
   const height = 240;
   const values = rows.map((row) => (mode === 'counts' ? row.count ?? 0 : row.probability));
   const max = Math.max(...values, 1);
@@ -395,6 +395,11 @@ function ResultsHistogram({ rows, mode }: { rows: DistributionRow[]; mode: Resul
     <div className="studio-chart-scroll">
       <svg viewBox={`0 0 ${width} ${height}`} className="studio-chart" role="img" aria-label="Histogram">
         <line x1={20} y1={196} x2={width - 18} y2={196} className="chart-axis" />
+        {rows.length === 0 ? (
+          <text x={width / 2} y={118} textAnchor="middle" className="chart-empty">
+            Run a circuit to populate histogram bins.
+          </text>
+        ) : null}
         {rows.map((row, index) => {
           const value = mode === 'counts' ? row.count ?? 0 : row.probability;
           const barHeight = (value / max) * 150;
@@ -468,6 +473,9 @@ export default function StudioPage() {
   const [zoom, setZoom] = useState(1);
 
   const [codeTab, setCodeTab] = useState<CodeTab>('qasm');
+  const [qasmDraft, setQasmDraft] = useState('');
+  const [qasmDirty, setQasmDirty] = useState(false);
+  const [qasmApplying, setQasmApplying] = useState(false);
   const [resultsMode, setResultsMode] = useState<ResultsMode>('counts');
 
   const [historyState, dispatchHistory] = useReducer(historyReducer, {
@@ -790,6 +798,7 @@ export default function StudioPage() {
             payload.kind,
           );
           replaceCircuit(next);
+          setQasmDirty(false);
           setSelectedOpId('');
         }
       } catch (jobError) {
@@ -817,6 +826,7 @@ export default function StudioPage() {
           record.name ?? 'Loaded circuit',
         );
         replaceCircuit(next);
+        setQasmDirty(false);
         setSelectedOpId('');
         setSelectedJob(null);
         setSelectedJobId('');
@@ -855,6 +865,7 @@ export default function StudioPage() {
       const payload = (await response.json()) as { circuit_id: string; job: JobDetail };
       setSelectedJob(payload.job);
       setSelectedJobId(payload.job.id);
+      setQasmDirty(false);
       setRailTab('jobs');
       await refreshHistory();
     } catch (runError) {
@@ -864,8 +875,41 @@ export default function StudioPage() {
     }
   }, [circuit, refreshHistory, shots]);
 
+  const applyQasmToCanvas = useCallback(async () => {
+    if (!qasmDraft.trim()) return;
+    setQasmApplying(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/circuit-model', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ qasm: qasmDraft }),
+      });
+      if (!response.ok) {
+        const errPayload = (await response.json()) as { detail?: string };
+        throw new Error(errPayload.detail ?? `Unable to parse OpenQASM (${response.status})`);
+      }
+      const payload = (await response.json()) as { qasm: string; circuit: CircuitView };
+      const next = toCircuitFromStructured(
+        payload.circuit.structured_gates,
+        payload.circuit.num_qubits,
+        payload.circuit.num_clbits,
+        circuit.name,
+      );
+      replaceCircuit(next);
+      setQasmDraft(payload.qasm ?? qasmDraft);
+      setQasmDirty(false);
+      setSelectedOpId('');
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : 'Failed to apply OpenQASM');
+    } finally {
+      setQasmApplying(false);
+    }
+  }, [circuit.name, qasmDraft, replaceCircuit]);
+
   const resetCircuit = () => {
     replaceCircuit(initialCircuit());
+    setQasmDirty(false);
     setSelectedOpId('');
     setSelectedJob(null);
     setSelectedJobId('');
@@ -935,6 +979,13 @@ export default function StudioPage() {
   const qasmCode = useMemo(() => circuitToOpenQasm(circuit), [circuit]);
   const qiskitCode = useMemo(() => circuitToQiskitSketch(circuit), [circuit]);
   const jsonCode = useMemo(() => JSON.stringify(toGatePayload(circuit), null, 2), [circuit]);
+  const qasmSynced = !qasmDirty && qasmDraft === qasmCode;
+
+  useEffect(() => {
+    if (!qasmDirty) {
+      setQasmDraft(qasmCode);
+    }
+  }, [qasmCode, qasmDirty]);
 
   return (
     <main className="studio-root">
@@ -1294,7 +1345,10 @@ export default function StudioPage() {
 
         <section className="studio-panel studio-code-panel">
           <div className="studio-panel-header">
-            <h2>OpenQASM</h2>
+            <div>
+              <h2>OpenQASM editor</h2>
+              <p>{qasmSynced ? 'Synced with circuit canvas.' : 'Unsaved edits in code pane.'}</p>
+            </div>
             <div className="studio-toolbar-group">
               <div className="studio-segmented">
                 <button type="button" className={codeTab === 'qasm' ? 'active' : ''} onClick={() => setCodeTab('qasm')}>
@@ -1307,16 +1361,43 @@ export default function StudioPage() {
                   Gates
                 </button>
               </div>
+              {codeTab === 'qasm' ? (
+                <button type="button" className="studio-button" onClick={() => void applyQasmToCanvas()} disabled={qasmApplying || !qasmDirty}>
+                  {qasmApplying ? 'Applying…' : 'Apply to canvas'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="studio-button"
-                onClick={() => copyText(codeTab === 'qasm' ? qasmCode : codeTab === 'python' ? qiskitCode : jsonCode)}
+                onClick={() => copyText(codeTab === 'qasm' ? qasmDraft : codeTab === 'python' ? qiskitCode : jsonCode)}
               >
                 Copy
               </button>
             </div>
           </div>
-          <pre className="studio-code-scroll">{codeTab === 'qasm' ? qasmCode : codeTab === 'python' ? qiskitCode : jsonCode}</pre>
+          {codeTab === 'qasm' ? (
+            <div className="studio-code-editor-wrap">
+              <textarea
+                className="studio-code-editor"
+                spellCheck={false}
+                value={qasmDraft}
+                onChange={(event) => {
+                  setQasmDraft(event.target.value);
+                  setQasmDirty(event.target.value !== qasmCode);
+                }}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    void applyQasmToCanvas();
+                  }
+                }}
+                aria-label="OpenQASM editor"
+              />
+              <p className="studio-code-hint">Tip: press Ctrl/Cmd + Enter to apply editor changes back onto the circuit canvas.</p>
+            </div>
+          ) : (
+            <pre className="studio-code-scroll">{codeTab === 'python' ? qiskitCode : jsonCode}</pre>
+          )}
         </section>
 
         <section className="studio-panel studio-viz-panel">
@@ -1340,15 +1421,15 @@ export default function StudioPage() {
             </div>
           </div>
 
-          {selectedJob ? (
-            <div className="studio-viz-grid">
-              <section className="studio-viz-card">
-                <h3>Probabilities histogram</h3>
-                <ResultsHistogram rows={histogram} mode={resultsMode} />
-              </section>
+          <div className="studio-viz-grid">
+            <section className="studio-viz-card">
+              <h3>Probabilities histogram</h3>
+              <ResultsHistogram rows={histogram} mode={resultsMode} />
+            </section>
 
-              <section className="studio-viz-card">
-                <h3>Top outcomes</h3>
+            <section className="studio-viz-card">
+              <h3>Top outcomes</h3>
+              {selectedJob ? (
                 <div className="studio-table-scroll">
                   <table className="studio-table">
                     <thead>
@@ -1369,18 +1450,20 @@ export default function StudioPage() {
                     </tbody>
                   </table>
                 </div>
-              </section>
+              ) : (
+                <p className="studio-muted">No job loaded yet. Execute a run to fill this probability table.</p>
+              )}
+            </section>
 
-              <section className="studio-viz-card">
-                <h3>State view</h3>
+            <section className="studio-viz-card">
+              <h3>State view</h3>
+              {selectedJob ? (
                 <BlochPanel vectors={selectedJob.derived?.bloch_vectors} reason={selectedJob.derived?.bloch_unavailable_reason} />
-              </section>
-            </div>
-          ) : (
-            <div className="studio-empty">
-              <p>Use <strong>Set up and run</strong> to execute the current circuit. Results will appear here immediately.</p>
-            </div>
-          )}
+              ) : (
+                <p className="studio-muted">Bloch vectors appear when the selected job has statevector-derived data.</p>
+              )}
+            </section>
+          </div>
         </section>
       </div>
     </main>
